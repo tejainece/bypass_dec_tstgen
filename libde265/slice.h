@@ -285,4 +285,16 @@ public:
   virtual void work();
 };
 
+
+typedef struct {
+	uint8_t bins[50];
+	uint32_t count;
+	uint8_t is_tr;
+
+	uint8_t baseVal;
+
+	uint32_t alr;
+	uint8_t nRP;
+} stim_alr_parser;
+
 #endif

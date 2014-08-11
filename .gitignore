@@ -21,3 +21,7 @@ de265-config.h
 *.ncb
 *.suo
 *.vcproj*
+
+*.stin
+*.stout
+language.settings.xml
