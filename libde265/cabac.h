@@ -53,4 +53,6 @@ int  decode_CABAC_FL_bypass(CABAC_decoder* decoder, int nBits);
 int  decode_CABAC_TR_bypass(CABAC_decoder* decoder, int cRiceParam, int cTRMax);
 int  decode_CABAC_EGk_bypass(CABAC_decoder* decoder, int k);
 
+void print_binary(unsigned int data);
+
 #endif

@@ -24,7 +24,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <assert.h>
-
+#include <iostream>
+#include <fstream>
 
 static const uint8_t LPS_table[64][4] =
   {
@@ -342,6 +343,9 @@ int  decode_CABAC_FL_bypass_parallel(CABAC_decoder* decoder, int nBits)
 {
   logtrace(LogCABAC,"[%3d] bypass group r:%x v:%x\n",logcnt,decoder->range, decoder->value);
 
+  uint16_t in_offset = decoder->value >> 7;
+  uint16_t stim_data = 0;
+
   decoder->value <<= nBits;
   decoder->bits_needed+=nBits;
 
@@ -353,11 +357,38 @@ int  decode_CABAC_FL_bypass_parallel(CABAC_decoder* decoder, int nBits)
       decoder->bits_needed -= 8;
       decoder->value |= input;
     }
-
+  stim_data = (decoder->value >> 7) & ((1 << nBits) - 1);
+  /******************bypass tstgen********************************/
   uint32_t scaled_range = decoder->range << 7;
   int value = decoder->value / scaled_range;
   if (unlikely(value>=(1<<nBits))) { value=(1<<nBits)-1; } // may happen with broken bitstreams
   decoder->value -= value * scaled_range;
+
+  //printf("nBits=%d range=%d offset=%d data=%d binval=%d new_offset=%d\n", nBits, decoder->range, in_offset, stim_data, value, decoder->value >> 7);
+
+  std::ofstream stim_stream("1.stin", std::ios::app);
+  std::cout << decoder->range << " " << in_offset << " " << nBits << " ";
+  stim_stream << decoder->range << " " << in_offset << " " << nBits << " ";
+
+  int i = nBits;
+  for(; i >=3; i = i - 3) {
+	  uint32_t bits = (stim_data >> (i - 3)) & 7;
+	  uint32_t bins = (value >> (i - 3)) & 7;
+	  std::cout << bits << " " << bins << " ";
+	  stim_stream << bits << " " << bins << " ";
+  }
+  if(i != 0) {
+	  uint16_t shift = 3 - i;
+	  uint32_t bits = (stim_data << shift) & 7;
+	  uint32_t bins = (value << shift) & 7;
+	  std::cout << bits << " " << bins << " ";
+	  stim_stream << bits << " " << bins << " ";
+  }
+
+  std::cout << (decoder->value >> 7) << std::endl;
+  stim_stream << (decoder->value >> 7) << std::endl;
+
+  stim_stream.close();
 
   logtrace(LogCABAC,"[%3d] -> value %d  r:%x v:%x\n", logcnt+nBits-1,
            value, decoder->range, decoder->value);
@@ -435,5 +466,22 @@ int  decode_CABAC_EGk_bypass(CABAC_decoder* decoder, int k)
 
   int suffix = decode_CABAC_FL_bypass(decoder, n);
   return base + suffix;
+}
+
+void print_binary(unsigned int data) {
+	bool got_one = false;
+	for(int i = 24; i >= 0; i--) {
+		unsigned int iterm = data & (1 << i);
+		if(iterm) {
+			printf("1");
+			got_one = true;
+		} else {
+			if(got_one) {
+				printf("0");
+			} else {
+				printf(" ");
+			}
+		}
+	}
 }
 

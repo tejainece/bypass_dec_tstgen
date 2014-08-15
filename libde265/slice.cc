@@ -1844,10 +1844,8 @@ static int decode_coeff_abs_level_greater2(thread_context* tctx,
 
 
 static int decode_coeff_abs_level_remaining(thread_context* tctx,
-                                            int cRiceParam, stim_alr_parser *stim)
+                                            int cRiceParam)
 {
-
-  stim->count = 0;
   logtrace(LogSlice,"# decode_coeff_abs_level_remaining\n");
 
   int prefix=-1;
@@ -1855,7 +1853,6 @@ static int decode_coeff_abs_level_remaining(thread_context* tctx,
   do {
     prefix++;
     codeword = decode_CABAC_bypass(&tctx->cabac_decoder);
-    stim->bins[stim->count++] = codeword;
   }
   while (codeword);
 
@@ -1868,11 +1865,6 @@ static int decode_coeff_abs_level_remaining(thread_context* tctx,
 
     codeword = decode_CABAC_FL_bypass(&tctx->cabac_decoder, cRiceParam);
     value = (prefix<<cRiceParam) + codeword;
-
-    for(int i = cRiceParam - 1; i >= 0; i--) {
-    	stim->bins[stim->count++] = (codeword & (1 << i)) && 1;
-    }
-    stim->is_tr = 1;
   }
   else {
     // Suffix coded with EGk. Note that the unary part of EGk is already
@@ -1880,11 +1872,6 @@ static int decode_coeff_abs_level_remaining(thread_context* tctx,
 
     codeword = decode_CABAC_FL_bypass(&tctx->cabac_decoder, prefix-3+cRiceParam);
     value = (((1<<(prefix-3))+3-1)<<cRiceParam)+codeword;
-
-    for(int i = prefix-3+cRiceParam - 1; i >= 0; i--) {
-    	stim->bins[stim->count++] = (codeword & (1 << i)) && 1;
-    }
-    stim->is_tr = 0;
   }
 
   return value;
@@ -2687,37 +2674,20 @@ int residual_coding(thread_context* tctx,
       int sumAbsLevel=0;
       int uiGoRiceParam=0;
 
-      /*************************alr_stim_gen********************************/
-      //printf("\n\nNew data set\n");
-      stim_alr_parser stim_ap[16];
-      uint32_t stim_count = 0;
-      /*********************************************************************/
-
       for (int n=0;n<nCoefficients;n++) {
         int baseLevel = coeff_value[n];
 
         int coeff_abs_level_remaining;
 
         if (coeff_has_max_base_level[n]) {
-          stim_alr_parser *cur_stim = stim_ap + (stim_count++);	//alr_stim_gen
           coeff_abs_level_remaining =
-            decode_coeff_abs_level_remaining(tctx, uiGoRiceParam, cur_stim);
-
-          /*printf("\talr=%d ricep=%d baselevel=%d is_tr=%d count=%d binval=",
-            				coeff_abs_level_remaining, uiGoRiceParam, baseLevel, cur_stim->is_tr, cur_stim->count);
-          for(int i = 0; i < cur_stim->count; i++) {
-          	  printf("%d", cur_stim->bins[i]);
-          }
-          printf("\n");*/
+            decode_coeff_abs_level_remaining(tctx, uiGoRiceParam);
 
           // (9-462)
           if (baseLevel + coeff_abs_level_remaining > 3*(1<<uiGoRiceParam)) {
             uiGoRiceParam++;
             if (uiGoRiceParam>4) uiGoRiceParam=4;
           }
-          cur_stim->baseVal = baseLevel;
-          cur_stim->alr = coeff_abs_level_remaining;
-          cur_stim->nRP = uiGoRiceParam;
         }
         else {
           coeff_abs_level_remaining = 0;
@@ -2750,46 +2720,6 @@ int residual_coding(thread_context* tctx,
         tctx->coeffPos [cIdx][ tctx->nCoeff[cIdx] ] = xC + yC*CoeffStride;
         tctx->nCoeff[cIdx]++;
       }  // iterate through coefficients in sub-block
-
-
-      if (stim_count) {
-		static uint32_t set_count = 1;
-		int outval = 0;
-		int curpos = 2;
-		FILE *infile = fopen("1.stin", "a+");
-		FILE *outfile = fopen("1.stout", "a+");
-		stim_alr_parser *stim_cur = stim_ap;
-		for (int i = 0; i < stim_count; i++, stim_cur++) {
-			fprintf(outfile, "%d %d %d %d\n", 2, stim_cur->baseVal,
-						stim_cur->alr, stim_cur->nRP);
-			for (int j = 0; j < stim_cur->count; j++) {
-				outval |= (stim_cur->bins[j] << curpos--);
-				if (curpos == -1) {
-					//printf("%d ", outval);
-					fprintf(infile, "%d ", outval);
-					curpos = 2;
-					outval = 0;
-				}
-			}
-		}
-		if (curpos != 2) {
-			//printf("%d 0 0 0\n", outval);
-			fprintf(infile, "%d 0 0 0\n", outval);
-		} else {
-			//printf("0 0 0\n");
-			fprintf(infile, "0 0 0\n");
-		}
-		fprintf(outfile, "1 %d\n", set_count);
-		fclose(infile);
-		fclose(outfile);
-		/*stim_cur = stim_ap;
-		for (int i = 0; i < stim_count; i++, stim_cur++) {
-			//printf("%d %d %d %d\n", 2, stim_cur->baseVal, stim_cur->alr, stim_cur->nRP);
-		}*/
-		//printf("1 %d\n", set_count);
-		set_count++;
-      }
-
     }  // if nonZero
   }  // next sub-block
 
